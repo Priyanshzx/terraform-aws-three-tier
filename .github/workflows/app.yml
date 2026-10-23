@@ -1,0 +1,95 @@
+name: App
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/app.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/app.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  APPLY_ROLE_ARN: arn:aws:iam::554739428679:role/github-actions-terraform-apply
+  ECR_REPOSITORY: three-tier-dev
+  ECS_CLUSTER: three-tier-dev-cluster
+  ECS_SERVICE: three-tier-dev-service
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r app/requirements.txt -r app/requirements-dev.txt
+
+      - name: Run tests
+        run: pytest app -v
+
+  build-and-deploy:
+    name: Build image and deploy
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Check the ECR repository exists
+        id: check
+        run: |
+          if aws ecr describe-repositories --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ECR repository not found. Apply the Terraform stack first, then re-run this workflow."
+          fi
+
+      - name: Log in to Amazon ECR
+        if: steps.check.outputs.exists == 'true'
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        if: steps.check.outputs.exists == 'true'
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          docker build \
+            -t "$REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA}" \
+            -t "$REGISTRY/$ECR_REPOSITORY:latest" \
+            app
+          docker push "$REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA}"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Roll out the new image
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --force-new-deployment >/dev/null
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE"

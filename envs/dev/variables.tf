@@ -10,17 +10,17 @@ variable "enable_nat_gateway" {
 }
 
 variable "container_image" {
-  description = "Image to run. Starts as public nginx for a smoke test; later set to <ecr_repository_url>:<tag>."
+  description = "Full image URI. Leave empty to run <ecr_repository_url>:latest, which the App workflow builds and pushes."
   type        = string
-  default     = "public.ecr.aws/docker/library/nginx:stable"
+  default     = ""
 }
 
 variable "container_port" {
   type    = number
-  default = 80
+  default = 8000
 }
 
 variable "health_check_path" {
   type    = string
-  default = "/"
+  default = "/health"
 }

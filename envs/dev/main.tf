@@ -72,6 +72,7 @@ module "app" {
   dynamodb_table_arn     = aws_dynamodb_table.tasks.arn
   environment = {
     TABLE_NAME = aws_dynamodb_table.tasks.name
+    AWS_REGION = var.region
   }
 
   depends_on = [module.alb]

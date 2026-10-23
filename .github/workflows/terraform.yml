@@ -67,6 +67,23 @@ jobs:
       - name: Plan
         run: terraform plan -input=false -no-color
 
+  security:
+    name: Security scan (checkov)
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install checkov
+        run: pip install checkov
+
+      - name: Scan Terraform (report only)
+        run: checkov -d . --framework terraform --compact --soft-fail
+
   apply:
     name: Apply
     if: >-

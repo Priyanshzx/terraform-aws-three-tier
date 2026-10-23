@@ -23,7 +23,9 @@ variable "target_group_arn" {
 }
 
 variable "container_image" {
-  type = string
+  description = "Full image URI. Empty means <ecr_repository_url>:latest."
+  type        = string
+  default     = ""
 }
 
 variable "container_port" {
