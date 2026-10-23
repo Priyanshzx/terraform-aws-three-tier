@@ -9,6 +9,10 @@ resource "aws_ecr_repository" "this" {
   }
 }
 
+locals {
+  image = var.container_image != "" ? var.container_image : "${aws_ecr_repository.this.repository_url}:latest"
+}
+
 # ---------- Logs ----------
 resource "aws_cloudwatch_log_group" "this" {
   name              = "/ecs/${var.name}"
@@ -107,7 +111,7 @@ resource "aws_ecs_task_definition" "this" {
 
   container_definitions = jsonencode([{
     name      = var.name
-    image     = var.container_image
+    image     = local.image
     essential = true
 
     portMappings = [{
